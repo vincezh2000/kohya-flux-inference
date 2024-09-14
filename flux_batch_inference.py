@@ -128,6 +128,36 @@ def denoise(
 
     return img
 
+def process_prompts(prompt_path, model, clip_l, t5xxl, ae, args):
+    # Get all txt files in the prompt_path
+    txt_files = [f for f in os.listdir(prompt_path) if f.endswith('.txt')]
+    txt_files.sort(key=lambda x: int(x.split('.')[0]))  # Sort by the number in the filename
+
+    logger.info(f"Found {len(txt_files)} prompt files in {prompt_path}")
+
+    for txt_file in txt_files:
+        index = int(txt_file.split('.')[0])
+        with open(os.path.join(prompt_path, txt_file), 'r') as f:
+            prompt = f.read().strip()
+
+        logger.info(f"Processing prompt from {txt_file}: {prompt[:50]}...")  # Log first 50 chars of prompt
+
+        generate_image(
+            model,
+            clip_l,
+            t5xxl,
+            ae,
+            prompt,
+            args.seed,
+            args.width,
+            args.height,
+            args.steps,
+            args.guidance,
+            args.negative_prompt,
+            args.cfg_scale,
+            os.environ.get('TRAIN_SET'),
+            index
+        )
 
 def do_sample(
     accelerator: Optional[accelerate.Accelerator],
@@ -203,6 +233,8 @@ def generate_image(
     guidance: float,
     negative_prompt: Optional[str],
     cfg_scale: float,
+    train_set: str,
+    index: int,
 ):
     seed = seed if seed is not None else random.randint(0, 2**32 - 1)
     logger.info(f"Seed: {seed}")
@@ -369,20 +401,13 @@ def generate_image(
     train_set_dir = os.path.join(output_dir, train_set)
     os.makedirs(train_set_dir, exist_ok=True)
 
-    output_filename = f"{train_set}_{args.seed}_{args.guidance}.png"
+    output_filename = f"{train_set}_{args.seed}_{args.guidance}_{index}.png"
     output_path = os.path.join(train_set_dir, output_filename)
     img.save(output_path)
-
-    logger.info(f"Saved image to {output_path}")
-
 
 if __name__ == "__main__":
     target_height = 1024  # 1024
     target_width = 1024  # 1024
-
-    # steps = 50  # 28  # 50
-    # guidance_scale = 5
-    # seed = 1  # None  # 1
 
     device = get_preferred_device()
 
@@ -392,7 +417,6 @@ if __name__ == "__main__":
     parser.add_argument("--t5xxl", type=str, required=False)
     parser.add_argument("--ae", type=str, required=False)
     parser.add_argument("--apply_t5_attn_mask", action="store_true")
-    parser.add_argument("--prompt", type=str, default="A photo of a cat")
     parser.add_argument("--output_dir", type=str, default=".")
     parser.add_argument("--dtype", type=str, default="bfloat16", help="base dtype")
     parser.add_argument("--clip_l_dtype", type=str, default=None, help="dtype for clip_l")
@@ -404,6 +428,7 @@ if __name__ == "__main__":
     parser.add_argument("--guidance", type=float, default=3.5)
     parser.add_argument("--negative_prompt", type=str, default=None)
     parser.add_argument("--cfg_scale", type=float, default=1.0)
+    parser.add_argument("--prompt_path", type=str, required=True, help="Path to the folder containing prompt txt files")
     parser.add_argument("--offload", action="store_true", help="Offload to CPU")
     parser.add_argument(
         "--lora_weights",
@@ -415,7 +440,6 @@ if __name__ == "__main__":
     parser.add_argument("--merge_lora_weights", action="store_true", help="Merge LoRA weights to model")
     parser.add_argument("--width", type=int, default=target_width)
     parser.add_argument("--height", type=int, default=target_height)
-    parser.add_argument("--interactive", action="store_true")
     args = parser.parse_args()
 
     seed = args.seed
@@ -453,11 +477,6 @@ if __name__ == "__main__":
     t5xxl = flux_utils.load_t5xxl(args.t5xxl, t5xxl_dtype, loading_device)
     t5xxl.eval()
 
-    # if is_fp8(clip_l_dtype):
-    #     clip_l = accelerator.prepare(clip_l)
-    # if is_fp8(t5xxl_dtype):
-    #     t5xxl = accelerator.prepare(t5xxl)
-
     t5xxl_max_length = 256 if is_schnell else 512
     tokenize_strategy = strategy_flux.FluxTokenizeStrategy(t5xxl_max_length)
     encoding_strategy = strategy_flux.FluxTextEncodingStrategy()
@@ -467,16 +486,10 @@ if __name__ == "__main__":
     model.eval()
     logger.info(f"Casting model to {flux_dtype}")
     model.to(flux_dtype)  # make sure model is dtype
-    # if is_fp8(flux_dtype):
-    #     model = accelerator.prepare(model)
-    #     if args.offload:
-    #         model = model.to("cpu")
 
     # AE
     ae = flux_utils.load_ae(name, args.ae, ae_dtype, loading_device)
     ae.eval()
-    # if is_fp8(ae_dtype):
-    #     ae = accelerator.prepare(ae)
 
     # LoRA
     lora_models: List[lora_flux.LoRANetwork] = []
@@ -511,72 +524,7 @@ if __name__ == "__main__":
 
         lora_models.append(lora_model)
 
-    if not args.interactive:
-        generate_image(
-            model,
-            clip_l,
-            t5xxl,
-            ae,
-            args.prompt,
-            args.seed,
-            args.width,
-            args.height,
-            args.steps,
-            args.guidance,
-            args.negative_prompt,
-            args.cfg_scale,
-        )
-    else:
-        # loop for interactive
-        width = target_width
-        height = target_height
-        steps = None
-        guidance = args.guidance
-        cfg_scale = args.cfg_scale
+    logger.info("Starting batch processing of prompts...")
+    process_prompts(args.prompt_path, model, clip_l, t5xxl, ae, args)
 
-        while True:
-            print(
-                "Enter prompt (empty to exit). Options: --w <width> --h <height> --s <steps> --d <seed> --g <guidance> --m <multipliers for LoRA>"
-                " --n <negative prompt>, `-` for empty negative prompt --c <cfg_scale>"
-            )
-            prompt = input()
-            if prompt == "":
-                break
-
-            # parse options
-            options = prompt.split("--")
-            prompt = options[0].strip()
-            seed = None
-            negative_prompt = None
-            for opt in options[1:]:
-                try:
-                    opt = opt.strip()
-                    if opt.startswith("w"):
-                        width = int(opt[1:].strip())
-                    elif opt.startswith("h"):
-                        height = int(opt[1:].strip())
-                    elif opt.startswith("s"):
-                        steps = int(opt[1:].strip())
-                    elif opt.startswith("d"):
-                        seed = int(opt[1:].strip())
-                    elif opt.startswith("g"):
-                        guidance = float(opt[1:].strip())
-                    elif opt.startswith("m"):
-                        mutipliers = opt[1:].strip().split(",")
-                        if len(mutipliers) != len(lora_models):
-                            logger.error(f"Invalid number of multipliers, expected {len(lora_models)}")
-                            continue
-                        for i, lora_model in enumerate(lora_models):
-                            lora_model.set_multiplier(float(mutipliers[i]))
-                    elif opt.startswith("n"):
-                        negative_prompt = opt[1:].strip()
-                        if negative_prompt == "-":
-                            negative_prompt = ""
-                    elif opt.startswith("c"):
-                        cfg_scale = float(opt[1:].strip())
-                except ValueError as e:
-                    logger.error(f"Invalid option: {opt}, {e}")
-
-            generate_image(model, clip_l, t5xxl, ae, prompt, seed, width, height, steps, guidance, negative_prompt, cfg_scale)
-
-    logger.info("Done!")
+    logger.info("Batch processing completed!")
