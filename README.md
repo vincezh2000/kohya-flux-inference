@@ -9,40 +9,6 @@ __Please update PyTorch to 2.4.0. We have tested with `torch==2.4.0` and `torchv
 The command to install PyTorch is as follows:
 `pip3 install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu124`
 
-### Recent Updates
-
-Sep 14, 2024:
-- You can now specify the rank for each layer in FLUX.1. See [Specify rank for each layer in FLUX.1](#specify-rank-for-each-layer-in-flux1) for details.
-- OFT is now supported with FLUX.1. See [FLUX.1 OFT training](#flux1-oft-training) for details.
-
-Sep 11, 2024: 
-Logging to wandb is improved. See PR [#1576](https://github.com/kohya-ss/sd-scripts/pull/1576) for details. Thanks to p1atdev!
-
-Sep 10, 2024:
-In FLUX.1 LoRA training, individual learning rates can be specified for CLIP-L and T5XXL. By specifying multiple numbers in `--text_encoder_lr`, you can set the learning rates for CLIP-L and T5XXL separately. Specify like `--text_encoder_lr 1e-4 1e-5`. The first value is the learning rate for CLIP-L, and the second value is for T5XXL. If you specify only one, the learning rates for CLIP-L and T5XXL will be the same.
-
-Sep 9, 2024:
-Added `--negative_prompt` and `--cfg_scale` to `flux_minimal_inference.py`. Negative prompts can be used. 
-
-Sep 5, 2024 (update 1):
-
-Added `--cpu_offload_checkpointing` option to LoRA training script. Offloads gradient checkpointing to CPU. This reduces up to 1GB of VRAM usage but slows down the training by about 15%. Cannot be used with `--split_mode`.
-
-Sep 5, 2024:
-
-The LoRA merge script now supports CLIP-L and T5XXL LoRA. Please specify `--clip_l` and `--t5xxl`. `--clip_l_save_to` and `--t5xxl_save_to` specify the save destination for CLIP-L and T5XXL. See [Merge LoRA to FLUX.1 checkpoint](#merge-lora-to-flux1-checkpoint) for details.
-
-Sep 4, 2024:
-- T5XXL LoRA is supported in LoRA training. Remove `--network_train_unet_only` and add `train_t5xxl=True` to `--network_args`. CLIP-L is also trained at the same time (T5XXL only cannot be trained). The trained model can be used with ComfyUI. See [Key Features for FLUX.1 LoRA training](#key-features-for-flux1-lora-training) for details.
-- In LoRA training, when `--fp8_base` is specified, you can specify `t5xxl_fp8_e4m3fn.safetensors` as the T5XXL weights. However, it is recommended to use fp16 weights for caching.
-- Fixed an issue where the training CLIP-L LoRA was not used in sample image generation during LoRA training.
-
-Sep 1, 2024:
-- `--timestamp_sampling` has `flux_shift` option. Thanks to sdbds!
-  - This is the same shift as FLUX.1 dev inference, adjusting the timestep sampling depending on the resolution. `--discrete_flow_shift` is ignored when `flux_shift` is specified. It is not verified which is better, `shift` or `flux_shift`.
-
-Aug 29, 2024: 
-Please update `safetensors` to `0.4.4` to fix the error when using `--resume`. `requirements.txt` is updated.
 
 ### Contents
 
@@ -477,37 +443,6 @@ cache_latents = true
 cache_latents_to_disk = true
 ```
 
-__2024/7/27:__
-
-Latents およびテキストエンコーダ出力のキャッシュの仕組みを大きくリファクタリングしました。SD3 用の既存のキャッシュファイルの再作成が必要になりますが、ご了承ください（以前のキャッシュファイルは削除してください）。これにより、特にデータセットの規模が大きい場合のデータセット初期化が大幅に高速化されます。
-
-データセット (`train_util.py`) からアーキテクチャ依存の部分を切り出しました。これにより将来的なアーキテクチャ追加が容易になると期待しています。
-
-SD1/2/SDXL のキャッシュ機構を含むアーキテクチャ依存の部分も切り出しました。sd3 ブランチの SD1/2/SDXL 学習について、基本的な動作は確認していますが、不具合があるかもしれません。SD1/2/SDXL の学習には main または dev ブランチをお使いください。
-
---- 
-
-[__Change History__](#change-history) is moved to the bottom of the page. 
-更新履歴は[ページ末尾](#change-history)に移しました。
-
-[日本語版READMEはこちら](./README-ja.md)
-
-For easier use (GUI and PowerShell scripts etc...), please visit [the repository maintained by bmaltais](https://github.com/bmaltais/kohya_ss). Thanks to @bmaltais!
-
-This repository contains the scripts for:
-
-* DreamBooth training, including U-Net and Text Encoder
-* Fine-tuning (native training), including U-Net and Text Encoder
-* LoRA training
-* Textual Inversion training
-* Image generation
-* Model conversion (supports 1.x and 2.x, Stable Diffision ckpt/safetensors and Diffusers)
-
-## About requirements.txt
-
-The file does not contain requirements for PyTorch. Because the version of PyTorch depends on the environment, it is not included in the file. Please install PyTorch first according to the environment. See installation instructions below.
-
-The scripts are tested with Pytorch 2.1.2. 2.0.1 and 1.12.1 is not tested but should work.
 
 ## Links to usage documentation
 
