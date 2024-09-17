@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export TRAIN_SET="3ddianshang"
+export TRAIN_SET="3ddianshang_epoch20"
 
 python flux_batch_inference.py \
   --ckpt "/data/base_model/FLUX.1-dev/flux1-dev.safetensors" \
@@ -16,5 +16,5 @@ python flux_batch_inference.py \
   --guidance 3.5 \
   --cfg_scale 1.0 \
   --flux_dtype fp8 \
-  --lora_weights "/data/Flux_train_20.3/output_refined_exhibition/flux-test-loraqkv-000007.safetensors;1.0" \
+  --lora_weights "/data/Flux_train_20.3/output_refined_exhibition_lycoris_epoch50/flux-test-loraqkv-000020.safetensors;1.0" \
   --prompt_path "/data/Flux_train_20.3/train/qinglong/train/8_exhibition"
