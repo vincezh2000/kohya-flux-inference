@@ -408,7 +408,7 @@ def generate_image(
 if __name__ == "__main__":
     target_height = 1024  # 1024
     target_width = 1024  # 1024
-
+    torch.backends.cuda.matmul.allow_tf32 = True
     device = get_preferred_device()
 
     parser = argparse.ArgumentParser()
